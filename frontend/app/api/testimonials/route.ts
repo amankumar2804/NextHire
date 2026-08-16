@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
+import clientPromise from "@/lib/mongodb";
 
-// Simple file-based storage so this works immediately without a database.
-// Swap this out for Prisma + MongoDB later (per NextHire Blueprint v3.0) —
-// only this file needs to change, the component stays the same.
-
-const DATA_DIR = path.join(process.cwd(), "data");
-const DATA_FILE = path.join(DATA_DIR, "testimonials.json");
+const DB_NAME = "NextHire";
+const COLLECTION = "testimonials";
 
 const AVATAR_COLORS = [
   "from-indigo-500 to-purple-600",
@@ -28,6 +23,7 @@ const SEED_TESTIMONIALS = [
     message:
       "NextHire helped me find the right opportunity quickly. The AI matching feature is amazing.",
     color: AVATAR_COLORS[0],
+    createdAt: new Date("2026-01-01"),
   },
   {
     id: "seed-2",
@@ -39,6 +35,7 @@ const SEED_TESTIMONIALS = [
     message:
       "The platform is simple, fast and has genuine job opportunities from top companies.",
     color: AVATAR_COLORS[1],
+    createdAt: new Date("2026-01-01"),
   },
   {
     id: "seed-3",
@@ -50,6 +47,7 @@ const SEED_TESTIMONIALS = [
     message:
       "I got multiple interview calls within weeks. Highly recommended for job seekers.",
     color: AVATAR_COLORS[2],
+    createdAt: new Date("2026-01-01"),
   },
   {
     id: "seed-4",
@@ -61,31 +59,37 @@ const SEED_TESTIMONIALS = [
     message:
       "Found 3 solid internships in my first week here. Wish I'd found NextHire earlier in college.",
     color: AVATAR_COLORS[3],
+    createdAt: new Date("2026-01-01"),
   },
 ];
 
 const VALID_TYPES = ["student", "fresher", "professional"];
 
-async function ensureFile() {
-  try {
-    await fs.access(DATA_FILE);
-  } catch {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(DATA_FILE, JSON.stringify(SEED_TESTIMONIALS, null, 2));
-  }
-}
-
 function isAdmin(req: NextRequest) {
   const key = req.headers.get("x-admin-key");
-  // Set ADMIN_SECRET in your .env.local file — never hardcode it here.
   return Boolean(process.env.ADMIN_SECRET) && key === process.env.ADMIN_SECRET;
+}
+
+async function getCollection() {
+  const client = await clientPromise;
+  return client.db(DB_NAME).collection(COLLECTION);
 }
 
 export async function GET() {
   try {
-    await ensureFile();
-    const raw = await fs.readFile(DATA_FILE, "utf-8");
-    return NextResponse.json(JSON.parse(raw));
+    const collection = await getCollection();
+
+    const count = await collection.countDocuments();
+    if (count === 0) {
+      await collection.insertMany(SEED_TESTIMONIALS);
+    }
+
+    const docs = await collection
+      .find({}, { projection: { _id: 0 } })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return NextResponse.json(docs);
   } catch (err) {
     console.error("Failed to load testimonials:", err);
     return NextResponse.json(
@@ -117,10 +121,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await ensureFile();
-    const raw = await fs.readFile(DATA_FILE, "utf-8");
-    const testimonials = JSON.parse(raw);
-
     const newTestimonial = {
       id: `user-${Date.now()}`,
       userType: VALID_TYPES.includes(userType) ? userType : "professional",
@@ -130,12 +130,18 @@ export async function POST(req: NextRequest) {
       rating,
       message: message.trim().slice(0, 400),
       color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+      createdAt: new Date(),
     };
 
-    const updated = [newTestimonial, ...testimonials];
-    await fs.writeFile(DATA_FILE, JSON.stringify(updated, null, 2));
+    const collection = await getCollection();
+    await collection.insertOne(newTestimonial);
 
-    return NextResponse.json(newTestimonial, { status: 201 });
+    const { _id, ...responseBody } = newTestimonial as typeof newTestimonial & {
+      _id?: unknown;
+    };
+    void _id;
+
+    return NextResponse.json(responseBody, { status: 201 });
   } catch (err) {
     console.error("Failed to save testimonial:", err);
     return NextResponse.json(
@@ -145,8 +151,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Only requests carrying the correct x-admin-key header (matched against
-// ADMIN_SECRET in .env.local) are allowed to delete a testimonial.
 export async function DELETE(req: NextRequest) {
   try {
     if (!isAdmin(req)) {
@@ -159,19 +163,16 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Missing id" }, { status: 400 });
     }
 
-    await ensureFile();
-    const raw = await fs.readFile(DATA_FILE, "utf-8");
-    const testimonials = JSON.parse(raw);
+    const collection = await getCollection();
+    const result = await collection.deleteOne({ id });
 
-    const updated = testimonials.filter((t: { id: string }) => t.id !== id);
-    if (updated.length === testimonials.length) {
+    if (result.deletedCount === 0) {
       return NextResponse.json(
         { error: "Testimonial not found" },
         { status: 404 }
       );
     }
 
-    await fs.writeFile(DATA_FILE, JSON.stringify(updated, null, 2));
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("Failed to delete testimonial:", err);
