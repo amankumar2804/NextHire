@@ -1,0 +1,32 @@
+[
+  {
+    "id": "user-1786907974513",
+    "userType": "student",
+    "name": "nayan",
+    "role": "mca",
+    "company": "hbtu",
+    "rating": 4,
+    "message": "jdebwh hdnxjb uhujndxahbj",
+    "color": "from-purple-500 to-pink-600"
+  },
+  {
+    "id": "user-1786906805984",
+    "userType": "student",
+    "name": "shishir mishra",
+    "role": "mca",
+    "company": "hbtu kanpur",
+    "rating": 3,
+    "message": "shishir is very funny boy",
+    "color": "from-violet-500 to-purple-600"
+  },
+  {
+    "id": "seed-1",
+    "userType": "professional",
+    "name": "Rahul Sharma",
+    "role": "Software Engineer",
+    "company": "Google",
+    "rating": 5,
+    "message": "NextHire helped me find the right opportunity quickly. The AI matching feature is amazing.",
+    "color": "from-indigo-500 to-purple-600"
+  }
+]
