@@ -375,17 +375,38 @@ function FeedbackModal({
 
 function AdminLoginModal({
   onClose,
-  onSubmit,
+  onSuccess,
 }: {
   onClose: () => void;
-  onSubmit: (key: string) => void;
+  onSuccess: (key: string) => void;
 }) {
   const [key, setKey] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (ev: React.FormEvent) => {
+  const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault();
     if (!key.trim()) return;
-    onSubmit(key.trim());
+    setError("");
+    setVerifying(true);
+
+    try {
+      const res = await fetch("/api/admin/verify", {
+        method: "POST",
+        headers: { "x-admin-key": key.trim() },
+      });
+
+      if (res.ok) {
+        onSuccess(key.trim());
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Incorrect admin key.");
+      }
+    } catch {
+      setError("Couldn't reach the server. Try again.");
+    } finally {
+      setVerifying(false);
+    }
   };
 
   return (
@@ -415,13 +436,23 @@ function AdminLoginModal({
             onChange={(e) => setKey(e.target.value)}
             placeholder="Admin key"
             autoFocus
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500"
+            className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 ${
+              error ? "border-red-500" : "border-slate-700"
+            }`}
           />
+          {error && <p className="text-red-400 text-xs">{error}</p>}
           <button
             type="submit"
-            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg py-2 transition-colors"
+            disabled={verifying}
+            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-semibold text-sm rounded-lg py-2 transition-colors flex items-center justify-center gap-2"
           >
-            Unlock
+            {verifying ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking...
+              </>
+            ) : (
+              "Unlock"
+            )}
           </button>
         </form>
       </div>
@@ -636,7 +667,7 @@ export default function Testimonials() {
       {showAdminModal && (
         <AdminLoginModal
           onClose={() => setShowAdminModal(false)}
-          onSubmit={handleAdminLogin}
+          onSuccess={handleAdminLogin}
         />
       )}
 
